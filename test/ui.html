@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ant Feast UI test</title>
+<!-- Drives the real page in an iframe: picks a generated image file, makes a
+     puzzle, checks the new level is playable, then removes it again. The
+     result also goes in the title (DONE ...) for headless polling. -->
+<style>iframe { width: 460px; height: 900px; border: 0; }</style>
+<pre id="out">running…</pre>
+<iframe id="app" src="../index.html"></iframe>
+<script type="module">
+const out = document.getElementById('out');
+const lines = [];
+const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+const finish = (s) => { log(s); document.title = `DONE ${s}`; };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, ms = 240000) {
+  const end = performance.now() + ms;
+  while (performance.now() < end) { const v = fn(); if (v) return v; await wait(200); }
+  throw new Error('timed out');
+}
+
+try {
+  const frame = document.getElementById('app');
+  await new Promise((r) => frame.addEventListener('load', r, { once: true }));
+  const w = frame.contentWindow;
+  const d = frame.contentDocument;
+  await until(() => w.game);
+  const builtIn = d.querySelectorAll('#level option').length;
+
+  // A picture with nested outlined shapes, as a PNG file.
+  const src = document.createElement('canvas');
+  src.width = 200; src.height = 200;
+  const c = src.getContext('2d');
+  c.fillStyle = '#cdeffd'; c.fillRect(0, 0, 200, 200);
+  for (const [r, col] of [[90, '#222'], [80, '#ff7043'], [60, '#222'], [50, '#ffee58'], [30, '#222'], [20, '#43a047']]) {
+    c.fillStyle = col; c.beginPath(); c.arc(100, 100, r, 0, Math.PI * 2); c.fill();
+  }
+  const blob = await new Promise((r) => src.toBlob(r, 'image/png'));
+  const dt = new DataTransfer();
+  dt.items.add(new File([blob], 'target_test.png', { type: 'image/png' }));
+  const input = d.getElementById('file');
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change'));
+
+  const dialog = d.getElementById('custom');
+  await until(() => dialog.open);
+  if (new URLSearchParams(location.search).get('stage') === 'dialog') {
+    await wait(300);
+    throw new Error('stopped at dialog (stage=dialog)');
+  }
+  log(`dialog open, name="${d.getElementById('custom-name').value}", preview ${d.getElementById('preview').width}x${d.getElementById('preview').height}`);
+  d.getElementById('custom-size').value = '16';
+  d.getElementById('custom-size').dispatchEvent(new Event('change'));
+  d.getElementById('custom-make').click();
+
+  // "Play now" becomes available once a solvable deal exists; use it.
+  await until(() => !d.getElementById('custom-play').disabled || !dialog.open);
+  log(`status: ${d.getElementById('custom-status').textContent}`);
+  if (dialog.open) d.getElementById('custom-play').click();
+  await until(() => !dialog.open);
+
+  const opts = [...d.querySelectorAll('#level option')];
+  const sel = opts.find((o) => o.selected);
+  log(`levels ${builtIn} -> ${opts.length}; selected "${sel.textContent}"; remove button visible=${!d.getElementById('remove').hidden}`);
+  const g = w.game;
+  log(`game ${g.w}x${g.h} pixels=${g.totalPixels} boxes=${g.stacks.flat().length} status=${g.status}`);
+  const saved = JSON.parse(w.localStorage.getItem('antfeast.custom.v1') || '[]');
+  log(`saved levels: ${saved.length}`);
+
+  // Play the first move to make sure input works on the custom level.
+  const before = g.stacks.flat().length;
+  g.placeBox(g.stacks.findIndex((s) => s.length));
+  log(`placed a box: ${before} -> ${g.stacks.flat().length} in stacks`);
+  await wait(1500);
+  log(`after 1.5s: ${g.pixelsLeft}/${g.totalPixels} pixels left, ${g.ants.length} ants out`);
+
+  // Optional screenshot of the game canvas, POSTed to a local helper server.
+  const shot = new URLSearchParams(location.search).get('shot');
+  if (shot) {
+    await wait(4000);
+    const png = await new Promise((r) => d.getElementById('game').toBlob(r, 'image/png'));
+    await fetch(shot, { method: 'POST', body: png }).catch(() => {});
+  }
+  w.confirm = () => true;
+  d.getElementById('remove').click();
+  const after = JSON.parse(w.localStorage.getItem('antfeast.custom.v1') || '[]');
+  finish(`ok=${opts.length === builtIn + 1 && saved.length >= 1 && after.length === saved.length - 1} ` +
+    `levels=${opts.length} saved=${saved.length} afterRemove=${after.length} ` +
+    `options now=${d.querySelectorAll('#level option').length}`);
+} catch (e) {
+  finish(`ERROR ${e.message}`);
+}
+</script>

@@ -5,6 +5,7 @@ import { updateAnts, STEP } from './ants.js';
 import { render } from './render.js';
 import { makeReplayer } from './bot.js';
 import { W, H, stackRect, contains } from './layout.js';
+import { setupCustomImages, loadSavedLevels, removeSavedLevel } from './custom.js';
 
 const params = new URLSearchParams(location.search);
 const debug = params.has('debug');
@@ -15,31 +16,65 @@ const ctx = canvas.getContext('2d');
 const levelSelect = document.getElementById('level');
 const restartBtn = document.getElementById('restart');
 const info = document.getElementById('info');
+const removeBtn = document.getElementById('remove');
+
+// Built-in levels followed by the player's own (saved in this browser).
+let levels = [...LEVELS, ...loadSavedLevels()];
 
 let levelIndex = clampLevel(parseInt(params.get('level') ?? '0', 10));
 let game;
 let bot = null;
 
 function clampLevel(i) {
-  return Number.isFinite(i) ? ((i % LEVELS.length) + LEVELS.length) % LEVELS.length : 0;
+  return Number.isFinite(i) ? ((i % levels.length) + levels.length) % levels.length : 0;
 }
 
 function startLevel(i) {
   levelIndex = clampLevel(i);
-  const def = LEVELS[levelIndex];
+  const def = levels[levelIndex];
   const image = parseLevel(def);
   const deal = def.deal ? parseDeal(def.deal, image) : undefined;
   game = new Game(image, hashString(def.name), { deal });
   bot = autoplay && def.solution ? makeReplayer(def.solution) : null;
   levelSelect.value = String(levelIndex);
+  removeBtn.hidden = !def.custom;
   window.game = game;
 }
 
-LEVELS.forEach((def, i) => {
-  const opt = document.createElement('option');
-  opt.value = String(i);
-  opt.textContent = `${i + 1}. ${def.name}`;
-  levelSelect.append(opt);
+function fillLevelSelect() {
+  levelSelect.replaceChildren();
+  const builtIn = document.createElement('optgroup');
+  builtIn.label = 'Levels';
+  const own = document.createElement('optgroup');
+  own.label = 'Your images';
+  levels.forEach((def, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = def.custom
+      ? `${def.name}${def.difficulty ? ` (${def.difficulty})` : ''}`
+      : `${i + 1}. ${def.name}`;
+    (def.custom ? own : builtIn).append(opt);
+  });
+  levelSelect.append(builtIn);
+  if (own.children.length) levelSelect.append(own);
+}
+fillLevelSelect();
+
+setupCustomImages({
+  onLevel(def) {
+    levels.push(def);
+    fillLevelSelect();
+    startLevel(levels.length - 1);
+  },
+});
+
+removeBtn.addEventListener('click', () => {
+  const def = levels[levelIndex];
+  if (!def.custom || !confirm(`Remove "${def.name}"?`)) return;
+  removeSavedLevel(def.id);
+  levels = [...LEVELS, ...loadSavedLevels()];
+  fillLevelSelect();
+  startLevel(0);
 });
 levelSelect.addEventListener('change', () => startLevel(parseInt(levelSelect.value, 10)));
 restartBtn.addEventListener('click', () => startLevel(levelIndex));

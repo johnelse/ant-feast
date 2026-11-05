@@ -11,11 +11,46 @@
     <h1>Ant Feast</h1>
     <select id="level" aria-label="Level"></select>
     <button id="restart" type="button">Restart</button>
+    <button id="upload" type="button">Use your image…</button>
+    <button id="remove" type="button" hidden>Remove</button>
     <span id="info"></span>
+    <input id="file" type="file" accept="image/*" hidden>
   </header>
   <main>
     <canvas id="game"></canvas>
   </main>
+
+  <dialog id="custom">
+    <form method="dialog" class="custom-form">
+      <h2>Make a level from your image</h2>
+      <canvas id="preview" aria-label="Pixelated preview"></canvas>
+      <label>Name <input id="custom-name" maxlength="24"></label>
+      <div class="row">
+        <label>Size
+          <select id="custom-size">
+            <option value="16">Small (16)</option>
+            <option value="20">Medium (20)</option>
+            <option value="24" selected>Large (24)</option>
+            <option value="32">Huge (32)</option>
+          </select>
+        </label>
+        <label>Colours
+          <select id="custom-colors">
+            <option>3</option><option>4</option><option>5</option>
+            <option selected>6</option><option>7</option><option>8</option>
+          </select>
+        </label>
+      </div>
+      <p id="custom-status"></p>
+      <progress id="custom-progress" max="1" value="0" hidden></progress>
+      <div class="row buttons">
+        <button id="custom-cancel" type="button">Cancel</button>
+        <button id="custom-make" type="button" class="primary">Make puzzle</button>
+        <button id="custom-play" type="button" class="primary" hidden>Play now</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
