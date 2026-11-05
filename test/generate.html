@@ -22,7 +22,8 @@ const res = generateDeal(image, {
   trials: num('trials', 16),
 });
 const out = [];
-{
+if (!res) out.push(`${def.name}: no solvable deal found`);
+else {
   const rep = fullReport(image, res.deal, num('report', 100));
   out.push(`${def.name}: ${res.greedyWins ? 'WARNING greedy still wins; ' : ''}climb rg=${res.rg.toFixed(2)} rr=${res.rr.toFixed(2)} | ` +
     `report greedy=${rep.greedyWins} randomGreedy=${rep.randomGreedyRate.toFixed(2)} ` +

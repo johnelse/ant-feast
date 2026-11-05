@@ -7,7 +7,7 @@
 // unthinking players win it no more often than before.
 
 import { Game, mulberry32, randomDeal, STACK_COUNT } from './state.js';
-import { evaluate, solve, playout, greedyChoice, randomGreedyChooser, randomChooser } from './solver.js';
+import { evaluate, solve, settle, playout, greedyChoice, randomGreedyChooser, randomChooser } from './solver.js';
 
 const MAX_STACK = 9;
 
@@ -63,7 +63,34 @@ function quickScore(game, trials) {
   return { value: rg + 0.5 * rr, rg, rr };
 }
 
-export function generateDeal(image, {
+// A deal that is certainly solvable: play from a pool of all the boxes,
+// always picking one that can eat, and deal the boxes onto the stacks in the
+// order they were used. Used when random starting deals don't work out.
+function sequenceDeal(image, pixels, rand, { boxMin, boxMax }) {
+  const boxes = randomDeal(pixels, Math.floor(rand() * 1e9), { boxMin, boxMax }).flat();
+  const game = settle(new Game(image, 0, { deal: [boxes, [], [], []] }));
+  const order = [];
+  while (game.status === 'playing') {
+    const pool = game.stacks[0];
+    if (!pool.length || game.freeSlot() < 0) break;
+    const eat = pool.map((_, i) => i).filter((i) => game.hasTarget(pool[i].color));
+    const pick = eat.length ? eat[Math.floor(rand() * eat.length)] : Math.floor(rand() * pool.length);
+    const [box] = pool.splice(pick, 1);
+    pool.unshift(box);
+    order.push({ color: box.color, count: box.count });
+    game.placeBox(0);
+    settle(game);
+  }
+  if (game.status !== 'won') return null;
+  const stacks = Array.from({ length: STACK_COUNT }, () => []);
+  order.forEach((b, i) => stacks[i % STACK_COUNT].push(b));
+  return stacks;
+}
+
+// Generator version, so callers can time-slice it (see generateWorker.js).
+// Yields { phase, it, iterations, deal, best } after each unit of work;
+// returns { deal, ...best } or null if no solvable deal was found.
+export function* generateDealSteps(image, {
   seed = 1,
   boxMin = 6,
   boxMax = 24,
@@ -71,7 +98,8 @@ export function generateDeal(image, {
   trials = 16,
   maxNodes = 4000,
   target = 0, // stop early once the score reaches this
-  onProgress = () => {},
+  patience = Infinity, // stop after this many steps without improvement
+  startTries = 12,
 } = {}) {
   const rand = mulberry32(seed);
   const pixels = new Array(image.colors.length).fill(0);
@@ -90,24 +118,50 @@ export function generateDeal(image, {
     return { ...q, value, greedyWins, solution };
   };
 
-  let deal = randomDeal(pixels, seed, { boxMin, boxMax });
-  let best = check(deal, Infinity);
-  for (let s = 1; !best; s++) {
+  let deal = null;
+  let best = null;
+  for (let s = 0; s < startTries && !best; s++) {
     deal = randomDeal(pixels, seed + s * 7919, { boxMin, boxMax });
     best = check(deal, Infinity);
+    yield { phase: 'start', it: 0, iterations, deal: best ? deal : null, best };
   }
+  for (let s = 0; s < startTries && !best; s++) {
+    deal = sequenceDeal(image, pixels, rand, { boxMin, boxMax });
+    best = deal && check(deal, Infinity);
+    yield { phase: 'start', it: 0, iterations, deal: best ? deal : null, best };
+  }
+  if (!best) return null;
 
-  for (let it = 0; it < iterations && best.value > target; it++) {
+  let lastGain = 0;
+  for (let it = 0; it < iterations && best.value > target && it - lastGain < patience; it++) {
     let cand = mutate(deal, rand, { boxMin, boxMax });
     while (rand() < 0.3) cand = mutate(cand, rand, { boxMin, boxMax });
     const r = check(cand, best.value);
     if (r) {
+      if (r.value < best.value) lastGain = it;
       deal = cand;
       best = r;
     }
-    onProgress(it, best);
+    yield { phase: 'climb', it: it + 1, iterations, deal, best };
   }
   return { deal, ...best };
+}
+
+export function generateDeal(image, opts = {}) {
+  const steps = generateDealSteps(image, opts);
+  for (;;) {
+    const r = steps.next();
+    if (r.done) return r.value;
+    opts.onProgress?.(r.value);
+  }
+}
+
+// Rough difficulty label from a generator score.
+export function difficultyLabel(best) {
+  if (!best || best.greedyWins) return 'easy';
+  if (best.rg > 0.5) return 'medium';
+  if (best.rg > 0.2) return 'hard';
+  return 'very hard';
 }
 
 export function fullReport(image, deal, trials = 100) {
