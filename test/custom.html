@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ant Feast custom image test</title>
+<!-- Converts a synthetic image into a level, generates a deal in the worker,
+     and replays the solution through the real game loop. -->
+<pre id="out">running…</pre>
+<canvas id="snap" width="420" height="772"></canvas>
+<script type="module">
+import { levelFromSource, toRGB, quantize, compact } from '../src/imageLoad.js';
+import { parseLevel, parseDeal } from '../src/image.js';
+import { Game } from '../src/state.js';
+import { updateAnts, STEP } from '../src/ants.js';
+import { makeReplayer } from '../src/bot.js';
+import { render } from '../src/render.js';
+
+const out = document.getElementById('out');
+const lines = [];
+const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+// Final summary goes in the title so headless runs can poll for it.
+const finish = (s) => { log(s); document.title = `DONE ${s}`; };
+
+// 1. Transparency becomes white; flat colours survive quantisation exactly.
+const rgba = new Uint8ClampedArray([255, 0, 0, 255, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255]);
+const px = toRGB(rgba);
+log(`transparent -> white: ${[...px.slice(3, 6)].every((v) => v === 255)} (want true)`);
+const q = compact(quantize(px, 8));
+log(`quantize 4 distinct colours with k=8 -> ${q.centers.length / 3} colours (want 4)`);
+
+// 2. A synthetic picture: sky, a sun with an outline, a house with a window.
+const src = document.createElement('canvas');
+src.width = 300;
+src.height = 240;
+const c = src.getContext('2d');
+c.fillStyle = '#8ecae6'; c.fillRect(0, 0, 300, 240);
+c.fillStyle = '#3d2b1f'; c.beginPath(); c.arc(70, 70, 46, 0, Math.PI * 2); c.fill();
+c.fillStyle = '#ffd60a'; c.beginPath(); c.arc(70, 70, 36, 0, Math.PI * 2); c.fill();
+c.fillStyle = '#e63946'; c.beginPath(); c.arc(70, 70, 14, 0, Math.PI * 2); c.fill();
+c.fillStyle = '#3d2b1f'; c.fillRect(150, 90, 120, 120);
+c.fillStyle = '#f1faee'; c.fillRect(160, 100, 100, 100);
+c.fillStyle = '#e63946'; c.fillRect(185, 125, 50, 50);
+c.fillStyle = '#2a9d8f'; c.fillRect(0, 210, 300, 30);
+
+const def = levelFromSource(src, 300, 240, { name: 'Synthetic', maxSide: 20, colors: 6 });
+const image = parseLevel(def);
+log(`level ${image.width}x${image.height}, colours=${image.colors.length}, full rectangle=${image.cells.every((v) => v >= 0)}`);
+log(def.rows.join('\n'));
+
+// 3. Generate in the worker, as the page does.
+const t0 = performance.now();
+const worker = new Worker(new URL('../src/generateWorker.js', import.meta.url), { type: 'module' });
+let progressCount = 0;
+worker.onerror = (e) => finish(`worker error: ${e.message}`);
+worker.onmessage = (e) => {
+  const msg = e.data;
+  if (msg.type === 'progress') { progressCount++; return; }
+  worker.terminate();
+  const r = msg.result;
+  if (!r) return finish('worker: no solvable deal found');
+  log(`worker done in ${((performance.now() - t0) / 1000).toFixed(1)}s after ${progressCount} progress messages: ` +
+    `difficulty=${r.difficulty} greedyWins=${r.greedyWins} rg=${r.rg.toFixed(2)}`);
+  log(`deal: ${JSON.stringify(r.deal)}`);
+
+  // 4. Replay through the real game loop.
+  const game = new Game(image, 0, { deal: parseDeal(r.deal, image) });
+  const bot = makeReplayer(r.solution);
+  let t = 0;
+  while (game.status === 'playing' && t < 900) { bot(game); updateAnts(game, STEP); game.updateStatus(); t += STEP; }
+  const replay = game.status;
+
+  const snap = new Game(image, 0, { deal: parseDeal(r.deal, image) });
+  const bot2 = makeReplayer(r.solution);
+  for (let s = 0; s < 15; s += STEP) { bot2(snap); updateAnts(snap, STEP); snap.updateStatus(); }
+  render(document.getElementById('snap').getContext('2d'), snap, {});
+  finish(`difficulty=${r.difficulty} greedyWins=${r.greedyWins} rg=${r.rg.toFixed(2)} ` +
+    `replay=${replay} (want won) progress=${progressCount} ${((performance.now() - t0) / 1000).toFixed(0)}s`);
+};
+worker.postMessage({ type: 'start', image, options: { iterations: +(new URLSearchParams(location.search).get('iterations') ?? 60), trials: 12, maxNodes: 3000, target: 0.1, seed: 1 } });
+</script>
