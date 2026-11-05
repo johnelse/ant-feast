@@ -40,6 +40,9 @@ function splitCount(n, rand, min, max) {
   return out;
 }
 
+const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+let routePrev = new Int32Array(0); // scratch buffer for routeTo()
+
 // Random deal: each colour's pixel count split into boxes, shuffled and dealt
 // round-robin onto the stacks.
 export function randomDeal(pixelsByColor, seed, { boxMin = DEFAULT_BOX_MIN, boxMax = DEFAULT_BOX_MAX } = {}) {
@@ -151,6 +154,44 @@ export class Game {
       visit(x, y - 1);
       visit(x, y + 1);
     }
+  }
+
+  // Shortest route through cleared space from just outside the picture to
+  // pixel i (which must be exposed). Coordinates are grid cells, where x = -1
+  // or w, or y = -1 or h, is the track running round the outside of the
+  // picture. Returns [[x, y], ...] from the entry point on that track to i.
+  routeTo(i) {
+    const W = this.w + 2;
+    const n = W * (this.h + 2);
+    if (routePrev.length < n) routePrev = new Int32Array(n);
+    const prev = routePrev;
+    prev.fill(-2, 0, n);
+    const tx = i % this.w;
+    const ty = (i - tx) / this.w;
+    const start = (ty + 1) * W + tx + 1;
+    prev[start] = -1;
+    const queue = [start];
+    for (let q = 0; q < queue.length; q++) {
+      const p = queue[q];
+      const px = (p % W) - 1;
+      const py = Math.floor(p / W) - 1;
+      if (px < 0 || py < 0 || px >= this.w || py >= this.h) {
+        const route = [];
+        for (let c = p; c !== -1; c = prev[c]) route.push([(c % W) - 1, Math.floor(c / W) - 1]);
+        return route;
+      }
+      for (const [dx, dy] of DIRS) {
+        const nx = px + dx;
+        const ny = py + dy;
+        const np = (ny + 1) * W + nx + 1;
+        if (prev[np] !== -2) continue;
+        const onTrack = nx < 0 || ny < 0 || nx >= this.w || ny >= this.h;
+        if (!onTrack && !this.outside[ny * this.w + nx]) continue;
+        prev[np] = p;
+        queue.push(np);
+      }
+    }
+    return [[tx, ty]]; // not reachable; can't happen for an exposed pixel
   }
 
   isExposed(i) {

@@ -12,8 +12,9 @@ SLOT.x0 = (W - (SLOT.count * SLOT.w + (SLOT.count - 1) * SLOT.gap)) / 2;
 export const STACK = { y: 494, w: 84, h: 52, gap: 12, rowH: 26, count: 4 };
 STACK.x0 = (W - (STACK.count * STACK.w + (STACK.count - 1) * STACK.gap)) / 2;
 
+// The picture leaves one cell of board all round it: the track ants walk on.
 export function picRect(game) {
-  const cell = Math.floor(Math.min(PIC.w / game.w, PIC.h / game.h));
+  const cell = Math.floor(Math.min(PIC.w / (game.w + 2), PIC.h / (game.h + 2)));
   const w = cell * game.w;
   const h = cell * game.h;
   return {

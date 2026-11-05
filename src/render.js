@@ -1,7 +1,6 @@
 // Canvas drawing. Everything is in logical coordinates (see layout.js).
 
 import { W, H, PIC, picRect, slotRect, stackRect } from './layout.js';
-import { cellCenter } from './ants.js';
 
 const BG = '#3a2c24';
 const BOARD = '#f2e6cc';
@@ -180,13 +179,13 @@ function drawDebug(ctx, game) {
     const y = pr.y + Math.floor(i / game.w) * pr.cell;
     ctx.strokeRect(x + 1.5, y + 1.5, pr.cell - 3, pr.cell - 3);
   }
+  // Remaining route of each ant on its way out.
   ctx.strokeStyle = 'rgba(255,255,0,0.5)';
   for (const ant of game.ants) {
     if (ant.state !== 'out') continue;
-    const c = cellCenter(game, pr, ant.target);
     ctx.beginPath();
     ctx.moveTo(ant.x, ant.y);
-    ctx.lineTo(c.x, c.y);
+    for (let k = ant.k; k < ant.path.length; k++) ctx.lineTo(ant.path[k].x, ant.path[k].y);
     ctx.stroke();
   }
 }
