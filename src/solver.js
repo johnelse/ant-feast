@@ -116,3 +116,29 @@ export function evaluate(game, { trials = 40, maxNodes = 20000 } = {}) {
     })(),
   };
 }
+
+// Win rate of `chooser` starting after the first k moves of a known
+// solution, or null if the game is already over by then.
+export function winRateAfter(start, solution, k, chooser, trials) {
+  const game = settle(start.clone());
+  for (let i = 0; i < k && game.status === 'playing'; i++) {
+    game.placeBox(solution[i]);
+    settle(game);
+  }
+  if (game.status !== 'playing') return null;
+  let wins = 0;
+  for (let t = 0; t < trials; t++) if (playout(game, chooser)) wins++;
+  return wins / trials;
+}
+
+// How hard a deal stays as it goes on: unthinking win rates from the start
+// and after the first k moves of a solution (sensible play up to that point).
+// A deal that's only hard in the opening shows low rates at k=0 and high
+// rates later.
+export function difficultyProfile(start, solution, { checkpoints = [0, 5, 10, 15], trials = 40, seed = 4242 } = {}) {
+  return checkpoints.filter((k) => k < solution.length).map((k) => ({
+    k,
+    rg: winRateAfter(start, solution, k, randomGreedyChooser(mulberry32(seed + k)), trials),
+    rr: winRateAfter(start, solution, k, randomChooser(mulberry32(seed + 1000 + k)), trials),
+  }));
+}

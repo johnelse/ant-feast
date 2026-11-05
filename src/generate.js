@@ -7,7 +7,7 @@
 // unthinking players win it no more often than before.
 
 import { Game, mulberry32, randomDeal, STACK_COUNT } from './state.js';
-import { evaluate, solve, settle, playout, greedyChoice, randomGreedyChooser, randomChooser } from './solver.js';
+import { evaluate, solve, settle, playout, winRateAfter, greedyChoice, randomGreedyChooser, randomChooser } from './solver.js';
 
 const MAX_STACK = 9;
 
@@ -100,6 +100,12 @@ export function* generateDealSteps(image, {
   target = 0, // stop early once the score reaches this
   patience = Infinity, // stop after this many steps without improvement
   startTries = 12,
+  // 'start': score unthinking play from the first move only.
+  // 'sustained': average it over several points through the solution
+  // (`checkpoints`, as fractions of its length), so deals stay hard after a
+  // sensible opening and into the late game.
+  objective = 'start',
+  checkpoints = [0, 0.2, 0.4, 0.6, 0.75],
 } = {}) {
   const rand = mulberry32(seed);
   const pixels = new Array(image.colors.length).fill(0);
@@ -109,13 +115,30 @@ export function* generateDealSteps(image, {
   // wins, so the climb can make progress towards deals that beat it.
   const check = (deal, bestValue) => {
     const game = new Game(image, 0, { deal });
-    const q = quickScore(game, trials);
     const greedyWins = playout(game, greedyChoice);
-    const value = q.value + (greedyWins ? 1 : 0);
-    if (value > bestValue) return null; // not an improvement, skip the solver
+    const penalty = greedyWins ? 1 : 0;
+    if (objective === 'start') {
+      const q = quickScore(game, trials);
+      const value = q.value + penalty;
+      if (value > bestValue) return null; // not an improvement, skip the solver
+      const { solution, complete } = solve(game, { maxNodes });
+      if (!solution || !complete) return null;
+      return { ...q, value, greedyWins, solution };
+    }
     const { solution, complete } = solve(game, { maxNodes });
     if (!solution || !complete) return null;
-    return { ...q, value, greedyWins, solution };
+    const ks = [...new Set(checkpoints.map((f) => Math.floor(f * solution.length)))];
+    const profile = [];
+    let sum = 0;
+    for (const k of ks) {
+      const rg = winRateAfter(game, solution, k, randomGreedyChooser(mulberry32(777 + k)), trials);
+      const rr = winRateAfter(game, solution, k, randomChooser(mulberry32(999 + k)), trials);
+      profile.push({ k, rg, rr });
+      sum += rg + 0.5 * rr;
+      if (penalty + sum / ks.length > bestValue) return null; // can't beat the best any more
+    }
+    const value = penalty + sum / ks.length;
+    return { value, rg: profile[0].rg, rr: profile[0].rr, profile, greedyWins, solution };
   };
 
   let deal = null;

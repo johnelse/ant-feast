@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ant Feast difficulty profile</title>
+<!-- For each level with a stored deal: how often unthinking play wins from
+     the start, and after the first k moves of the stored solution.
+     ?trials=40&only=Pizza,Apple (checkpoints=0,5,10 for fixed move counts;
+     default is 0/20/40/60/75/90% of the way through) -->
+<pre id="out">running…</pre>
+<script type="module">
+import { LEVELS } from '../src/levels.js';
+import { parseLevel, parseDeal } from '../src/image.js';
+import { Game } from '../src/state.js';
+import { difficultyProfile } from '../src/solver.js';
+
+const q = new URLSearchParams(location.search);
+const trials = +(q.get('trials') ?? 40);
+// Checkpoints: explicit move counts, or by default fractions of the solution.
+const fixed = q.get('checkpoints')?.split(',').map(Number);
+const FRACTIONS = [0, 0.2, 0.4, 0.6, 0.75, 0.9];
+const only = q.get('only');
+const lines = ['level      moves  | random-among-eaters win rate after k moves | fully random'];
+for (const def of LEVELS) {
+  if (!def.deal || !def.solution || (only && !only.split(',').includes(def.name))) continue;
+  const image = parseLevel(def);
+  const game = new Game(image, 0, { deal: parseDeal(def.deal, image) });
+  const checkpoints = fixed ?? FRACTIONS.map((f) => Math.floor(f * def.solution.length));
+  const prof = difficultyProfile(game, [...def.solution].map(Number), { trials, checkpoints });
+  const fmt = (key) => prof.map((p) => `k=${p.k}:${p[key] == null ? '-' : p[key].toFixed(2)}`).join(' ');
+  lines.push(`${def.name.padEnd(10)} ${String(def.solution.length).padStart(5)}  | ${fmt('rg')} | ${fmt('rr')}`);
+}
+document.getElementById('out').textContent = lines.join('\n');
+</script>

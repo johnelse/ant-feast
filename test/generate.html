@@ -8,6 +8,8 @@
 import { LEVELS } from '../src/levels.js';
 import { parseLevel, formatDeal } from '../src/image.js';
 import { generateDeal, fullReport } from '../src/generate.js';
+import { Game } from '../src/state.js';
+import { difficultyProfile } from '../src/solver.js';
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? +q.get(k) : d);
@@ -20,6 +22,7 @@ const res = generateDeal(image, {
   boxMin: num('min', 6),
   boxMax: num('max', 24),
   trials: num('trials', 16),
+  objective: q.get('objective') ?? 'start',
 });
 const out = [];
 if (!res) out.push(`${def.name}: no solvable deal found`);
@@ -30,7 +33,12 @@ else {
     `random=${rep.randomRate.toFixed(2)} solvable=${rep.solvable} ` +
     `boxes=${res.deal.flat().length} ${((performance.now() - t0) / 1000).toFixed(0)}s`);
   out.push(`    deal: ${JSON.stringify(formatDeal(res.deal, image))},`);
-  out.push(`    // solution: ${res.solution.join('')}`);
+  out.push(`    solution: '${res.solution.join('')}',`);
+  const ks = [0, 0.2, 0.4, 0.6, 0.75, 0.9].map((f) => Math.floor(f * res.solution.length));
+  const prof = difficultyProfile(new Game(image, 0, { deal: res.deal }), res.solution,
+    { checkpoints: ks, trials: Math.min(40, num('report', 100)) });
+  out.push(`    // after k of ${res.solution.length} sensible moves, random-among-eaters / random win: ` +
+    prof.map((p) => `k=${p.k} ${p.rg.toFixed(2)}/${p.rr.toFixed(2)}`).join('  '));
 }
 document.getElementById('out').textContent = out.join('\n');
 </script>
