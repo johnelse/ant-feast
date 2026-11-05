@@ -2,6 +2,10 @@
 // Each level is a complete rectangular grid of characters; every character
 // must appear in the palette (backgrounds are ordinary colours too).
 // Keep to about 8 colours per picture.
+// `deal` is the four stacks, top box first: colour key + ant count. Deals come
+// from test/generate.html, which searches for ones that are solvable but beat
+// unthinking play; `solution` is one winning order of stacks (a spoiler, used
+// by tests and ?auto).
 
 export const LEVELS = [
   {
@@ -11,6 +15,13 @@ export const LEVELS = [
       g: '#558b2f', G: '#8bc34a',
       c: '#b3e5fc', s: '#8d6e63',
     },
+    deal: [
+      'p15 c14 G19 s12 c24 g18 y10 c19',
+      'Y16 c16 p8 p10 P21 P20',
+      'p17 p11 s18 P17 P13 c15 c21 c7 P11',
+      'p16 s23 y18 c8 G7 G16',
+    ],
+    solution: '11000000111001222222222333333', // stack numbers, top-left = 0
     rows: [
       'yyyccccPPPPPPcccPcPc',
       'yYycccPppPPppPccpPpc',
@@ -43,6 +54,13 @@ export const LEVELS = [
       d: '#6d4c41', b: '#4fc3f7', g: '#7cb342',
       c: '#bbdefb',
     },
+    deal: [
+      'R9 R11 w19',
+      'w10 w11 w17 c22 c6 c19 c16 c18 w12',
+      'b12 W8 R22 r13 R16 w16 c14 g14 r21',
+      'd20 R13 w11 c19 c13 r6 g13 c22 g17',
+    ],
+    solution: '011110110111222222222333333333', // stack numbers, top-left = 0
     rows: [
       'ccccccccccccccccrrcccc',
       'ccccccccccRRccccrrcccc',
@@ -73,6 +91,13 @@ export const LEVELS = [
       w: '#ffffff', k: '#111111', o: '#ff8f00',
       a: '#2a9d8f', u: '#d8f3f0',
     },
+    deal: [
+      'l22 l9 b14',
+      'b24 l22 b12 B14 a22 o17 u9',
+      'b18 b21 w8 a13 a21 a10 a15 B8 B14',
+      'k4 b6 b7 b16 a21 a17 B20',
+    ],
+    solution: '01111001112222222223333333', // stack numbers, top-left = 0
     rows: [
       'aaauaaaaaaaaBBBBaaaaauaa',
       'aauaaaaaaaBBbbbbBaaaaaaa',
@@ -99,6 +124,13 @@ export const LEVELS = [
       s: '#ecd9b0', S: '#b8955f', g: '#43a047',
       c: '#9ad0ec',
     },
+    deal: [
+      'R7 c23 c23',
+      'w19 R17 c14 c9 g22 R21 k23',
+      'S7 s11 R22 s22 k18',
+      'c14 w12 R22 s21 g6 k13 c8 k6',
+    ],
+    solution: '30001111111222223333333', // stack numbers, top-left = 0
     rows: [
       'cccccckkkkkkkkcccccc',
       'cccckkRRRRRRRRkkcccc',
@@ -127,6 +159,13 @@ export const LEVELS = [
       r: '#e53935', d: '#9c1f2a', w: '#ffd6cc',
       c: '#a7d8f0', t: '#c8a26b',
     },
+    deal: [
+      'r14 r7 r14 c23 c18 w18 r9',
+      'c6 G6 r12 g7',
+      'c24 b6 r22 t20 r17 r18 d20 w9 r12',
+      'r11 r10 c11 r13 r14 d14 d24 r21',
+    ],
+    solution: '1122222220000000112233333333', // stack numbers, top-left = 0
     rows: [
       'ccccccccccbccGGgcccc',
       'cccccccccbbcGGgggccc',

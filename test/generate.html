@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ant Feast deal generator</title>
+<!-- Usage: test/generate.html?level=0&iterations=200&seed=1
+     Prints a deal to paste into src/levels.js, plus a difficulty report. -->
+<pre id="out">generating…</pre>
+<script type="module">
+import { LEVELS } from '../src/levels.js';
+import { parseLevel, formatDeal } from '../src/image.js';
+import { generateDeal, fullReport } from '../src/generate.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? +q.get(k) : d);
+const def = LEVELS[num('level', 0)];
+const image = parseLevel(def);
+const t0 = performance.now();
+const res = generateDeal(image, {
+  seed: num('seed', 1),
+  iterations: num('iterations', 200),
+  boxMin: num('min', 6),
+  boxMax: num('max', 24),
+  trials: num('trials', 16),
+});
+const out = [];
+{
+  const rep = fullReport(image, res.deal, num('report', 100));
+  out.push(`${def.name}: ${res.greedyWins ? 'WARNING greedy still wins; ' : ''}climb rg=${res.rg.toFixed(2)} rr=${res.rr.toFixed(2)} | ` +
+    `report greedy=${rep.greedyWins} randomGreedy=${rep.randomGreedyRate.toFixed(2)} ` +
+    `random=${rep.randomRate.toFixed(2)} solvable=${rep.solvable} ` +
+    `boxes=${res.deal.flat().length} ${((performance.now() - t0) / 1000).toFixed(0)}s`);
+  out.push(`    deal: ${JSON.stringify(formatDeal(res.deal, image))},`);
+  out.push(`    // solution: ${res.solution.join('')}`);
+}
+document.getElementById('out').textContent = out.join('\n');
+</script>
