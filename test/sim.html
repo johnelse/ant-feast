@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ant Feast simulation test</title>
+<!-- Checks every level: deal totals match the picture, and the stored solution
+     wins when replayed through the real game loop. Also renders a mid-game
+     snapshot (?level=N&t=seconds&debug). -->
+<pre id="out">running…</pre>
+<canvas id="snap" width="420" height="772"></canvas>
+<script type="module">
+import { LEVELS } from '../src/levels.js';
+import { parseLevel, parseDeal } from '../src/image.js';
+import { Game, hashString } from '../src/state.js';
+import { updateAnts, STEP } from '../src/ants.js';
+import { makeReplayer } from '../src/bot.js';
+import { playout, greedyChoice } from '../src/solver.js';
+import { render } from '../src/render.js';
+
+function makeGame(def) {
+  const image = parseLevel(def);
+  const deal = def.deal ? parseDeal(def.deal, image) : undefined;
+  return new Game(image, hashString(def.name), { deal }); // throws if totals mismatch
+}
+
+function run(game, bot, seconds) {
+  let t = 0;
+  while (game.status === 'playing' && t < seconds) {
+    bot(game);
+    updateAnts(game, STEP);
+    game.updateStatus();
+    t += STEP;
+  }
+  return t;
+}
+
+const lines = [];
+for (const def of LEVELS) {
+  try {
+    const game = makeGame(def);
+    if (!def.solution) {
+      lines.push(`${def.name.padEnd(9)} no stored solution`);
+      continue;
+    }
+    const t = run(game, makeReplayer(def.solution), 900);
+    const greedy = playout(makeGame(def), greedyChoice);
+    lines.push(`${def.name.padEnd(9)} pixels=${game.totalPixels} boxes=${def.deal.join(' ').split(' ').length} ` +
+      `solution replay -> ${game.status} (${t.toFixed(0)}s game time) | greedy player ${greedy ? 'WINS' : 'loses'}`);
+  } catch (e) {
+    lines.push(`${def.name.padEnd(9)} ERROR ${e.message}`);
+  }
+}
+
+// Exposure: inner colours are only reachable once the layers around them go.
+const ring = new Game(parseLevel({ name: 'ring', palette: { a: '#ff0000', b: '#00ff00', c: '#0000ff' },
+  rows: ['aaaaa', 'abbba', 'abcba', 'abbba', 'aaaaa'] }), 1);
+const onlyBorder = [...ring.exposed].every((e, i) => e === ([0, 4].includes(i % 5) || i < 5 || i >= 20 ? 1 : 0));
+ring.takePixel(2);
+const midAfterOuter = ring.isExposed(7) && !ring.isExposed(12);
+ring.takePixel(7);
+lines.push(`ring: only border exposed at start=${onlyBorder}, ` +
+  `ring opens after outer=${midAfterOuter}, centre opens after ring=${ring.isExposed(12)} (all want true)`);
+
+// Mid-game snapshot.
+const q = new URLSearchParams(location.search);
+const def = LEVELS[parseInt(q.get('level') ?? '1', 10)];
+const snap = makeGame(def);
+run(snap, def.solution ? makeReplayer(def.solution) : () => {}, parseFloat(q.get('t') ?? '6'));
+render(document.getElementById('snap').getContext('2d'), snap, { debug: q.has('debug') });
+
+document.getElementById('out').textContent = lines.join('\n');
+</script>
