@@ -1,6 +1,6 @@
 // Canvas drawing. Everything is in logical coordinates (see layout.js).
 
-import { W, H, PIC, picRect, slotRect, stackRect } from './layout.js';
+import { W, H, PIC, picRect, slotRect, stackRect, stackRowH } from './layout.js';
 
 const BG = '#3a2c24';
 const BOARD = '#f2e6cc';
@@ -59,6 +59,7 @@ function drawSlots(ctx, game) {
 
 function drawStacks(ctx, game) {
   const canPlace = game.freeSlot() >= 0 && game.status === 'playing';
+  const rowH = stackRowH(game.deepest);
   game.stacks.forEach((stack, si) => {
     if (!stack.length) {
       const r = stackRect(si, 0);
@@ -72,7 +73,7 @@ function drawStacks(ctx, game) {
       return;
     }
     for (let d = stack.length - 1; d >= 0; d--) {
-      drawBox(ctx, game, stack[d], stackRect(si, d), {
+      drawBox(ctx, game, stack[d], stackRect(si, d, rowH), {
         value: stack[d].remaining,
         compact: d > 0,
         highlight: d === 0 && canPlace,
@@ -111,7 +112,7 @@ function drawBox(ctx, game, box, r, { hole = false, value, compact = false, high
     textY = y + h * 0.66;
   }
 
-  ctx.font = compact ? '700 14px system-ui, sans-serif' : '800 20px system-ui, sans-serif';
+  ctx.font = compact ? `700 ${Math.min(14, h - 4)}px system-ui, sans-serif` : '800 20px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = compact ? 3 : 4;

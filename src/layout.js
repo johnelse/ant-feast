@@ -33,10 +33,17 @@ export function holePos(i) {
   return { x: r.x + r.w / 2, y: r.y + 15 };
 }
 
-export function stackRect(i, depth = 0) {
+// Height of the compact rows under the top box: as tall as STACK.rowH, but
+// squeezed so a stack of `deepest` boxes still fits on the canvas.
+export function stackRowH(deepest) {
+  const room = H - 6 - (STACK.y + STACK.h + 2);
+  return Math.max(12, Math.min(STACK.rowH, Math.floor(room / Math.max(1, deepest - 1))));
+}
+
+export function stackRect(i, depth = 0, rowH = STACK.rowH) {
   const x = STACK.x0 + i * (STACK.w + STACK.gap);
   if (depth === 0) return { x, y: STACK.y, w: STACK.w, h: STACK.h };
-  return { x, y: STACK.y + STACK.h + 2 + (depth - 1) * STACK.rowH, w: STACK.w, h: STACK.rowH };
+  return { x, y: STACK.y + STACK.h + 2 + (depth - 1) * rowH, w: STACK.w, h: rowH };
 }
 
 export function contains(r, x, y) {

@@ -97,6 +97,7 @@ export class Game {
     let id = 0;
     this.stacks = deal.map((stack) => stack.map(({ color, count }) =>
       ({ id: id++, color, count, remaining: count, out: 0, releaseTimer: 0 })));
+    this.deepest = Math.max(...this.stacks.map((st) => st.length)); // for layout
     const totals = new Array(this.colors.length).fill(0);
     for (const b of this.stacks.flat()) totals[b.color] += b.count;
     totals.forEach((t, c) => {
