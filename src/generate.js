@@ -1,15 +1,12 @@
-// Builds box deals that need thought: solvable, but not by unthinking play.
-//
-// Starts from a random deal and hill-climbs with small mutations (swap two
-// boxes, move a box to another stack, shift ants between two boxes of the same
-// colour). A candidate is kept if it stays fair (the solver wins it), the
-// "take anything that can eat" player loses (penalised until it does), and
-// unthinking players win it no more often than before.
+// Building blocks for making box deals that need thought: solvable, but not
+// by unthinking play. The search itself (hill-climbing over mutations: swap
+// two boxes, move a box to another stack, shift ants between two boxes of the
+// same colour) runs in parallel across workers; see parallel.js.
 
 import { Game, mulberry32, randomDeal, STACK_COUNT } from './state.js';
 import { evaluate, solve, settle, playout, winRateAfter, greedyChoice, randomGreedyChooser, randomChooser } from './solver.js';
 
-const MAX_STACK = 9;
+const MAX_STACK = 16; // the stack layout squeezes rows to fit this many
 
 function cloneDeal(deal) {
   return deal.map((s) => s.map((b) => ({ ...b })));
@@ -66,7 +63,7 @@ function quickScore(game, trials) {
 // A deal that is certainly solvable: play from a pool of all the boxes,
 // always picking one that can eat, and deal the boxes onto the stacks in the
 // order they were used. Used when random starting deals don't work out.
-function sequenceDeal(image, pixels, rand, { boxMin, boxMax }) {
+export function sequenceDeal(image, pixels, rand, { boxMin, boxMax }) {
   const boxes = randomDeal(pixels, Math.floor(rand() * 1e9), { boxMin, boxMax }).flat();
   const game = settle(new Game(image, 0, { deal: [boxes, [], [], []] }));
   const order = [];
@@ -87,96 +84,60 @@ function sequenceDeal(image, pixels, rand, { boxMin, boxMax }) {
   return stacks;
 }
 
-// Generator version, so callers can time-slice it (see generateWorker.js).
-// Yields { phase, it, iterations, deal, best } after each unit of work;
-// returns { deal, ...best } or null if no solvable deal was found.
-export function* generateDealSteps(image, {
-  seed = 1,
-  boxMin = 6,
-  boxMax = 24,
-  iterations = 200,
+export const DEFAULT_CHECKPOINTS = [0, 0.2, 0.4, 0.6, 0.75];
+
+// Score one deal. Lower values are harder. Returns null if the deal isn't
+// solvable, or (to save time) as soon as it clearly can't beat `bestValue`.
+//   objective 'start': unthinking win rates from the first move only.
+//   objective 'sustained': averaged over several points through the solution
+//     (`checkpoints`, as fractions of its length), so deals stay hard after
+//     a sensible opening and into the late game.
+// Greedy play winning adds a penalty of 1, so a climb can still make
+// progress towards deals that beat it.
+export function checkDeal(image, deal, bestValue = Infinity, {
+  objective = 'start',
   trials = 16,
   maxNodes = 4000,
-  target = 0, // stop early once the score reaches this
-  patience = Infinity, // stop after this many steps without improvement
-  startTries = 12,
-  // 'start': score unthinking play from the first move only.
-  // 'sustained': average it over several points through the solution
-  // (`checkpoints`, as fractions of its length), so deals stay hard after a
-  // sensible opening and into the late game.
-  objective = 'start',
-  checkpoints = [0, 0.2, 0.4, 0.6, 0.75],
+  checkpoints = DEFAULT_CHECKPOINTS,
 } = {}) {
-  const rand = mulberry32(seed);
-  const pixels = new Array(image.colors.length).fill(0);
-  for (const c of image.cells) pixels[c]++;
-
-  // Score = unthinking win rates, plus a penalty while greedy play still
-  // wins, so the climb can make progress towards deals that beat it.
-  const check = (deal, bestValue) => {
-    const game = new Game(image, 0, { deal });
-    const greedyWins = playout(game, greedyChoice);
-    const penalty = greedyWins ? 1 : 0;
-    if (objective === 'start') {
-      const q = quickScore(game, trials);
-      const value = q.value + penalty;
-      if (value > bestValue) return null; // not an improvement, skip the solver
-      const { solution, complete } = solve(game, { maxNodes });
-      if (!solution || !complete) return null;
-      return { ...q, value, greedyWins, solution };
-    }
+  const game = new Game(image, 0, { deal });
+  const greedyWins = playout(game, greedyChoice);
+  const penalty = greedyWins ? 1 : 0;
+  if (objective === 'start') {
+    const q = quickScore(game, trials);
+    const value = q.value + penalty;
+    if (value > bestValue) return null; // not an improvement, skip the solver
     const { solution, complete } = solve(game, { maxNodes });
     if (!solution || !complete) return null;
-    const ks = [...new Set(checkpoints.map((f) => Math.floor(f * solution.length)))];
-    const profile = [];
-    let sum = 0;
-    for (const k of ks) {
-      const rg = winRateAfter(game, solution, k, randomGreedyChooser(mulberry32(777 + k)), trials);
-      const rr = winRateAfter(game, solution, k, randomChooser(mulberry32(999 + k)), trials);
-      profile.push({ k, rg, rr });
-      sum += rg + 0.5 * rr;
-      if (penalty + sum / ks.length > bestValue) return null; // can't beat the best any more
-    }
-    const value = penalty + sum / ks.length;
-    return { value, rg: profile[0].rg, rr: profile[0].rr, profile, greedyWins, solution };
-  };
-
-  let deal = null;
-  let best = null;
-  for (let s = 0; s < startTries && !best; s++) {
-    deal = randomDeal(pixels, seed + s * 7919, { boxMin, boxMax });
-    best = check(deal, Infinity);
-    yield { phase: 'start', it: 0, iterations, deal: best ? deal : null, best };
+    return { ...q, value, greedyWins, solution };
   }
-  for (let s = 0; s < startTries && !best; s++) {
-    deal = sequenceDeal(image, pixels, rand, { boxMin, boxMax });
-    best = deal && check(deal, Infinity);
-    yield { phase: 'start', it: 0, iterations, deal: best ? deal : null, best };
+  const { solution, complete } = solve(game, { maxNodes });
+  if (!solution || !complete) return null;
+  const ks = [...new Set(checkpoints.map((f) => Math.floor(f * solution.length)))];
+  const profile = [];
+  let sum = 0;
+  for (const k of ks) {
+    const rg = winRateAfter(game, solution, k, randomGreedyChooser(mulberry32(777 + k)), trials);
+    const rr = winRateAfter(game, solution, k, randomChooser(mulberry32(999 + k)), trials);
+    profile.push({ k, rg, rr });
+    sum += rg + 0.5 * rr;
+    if (penalty + sum / ks.length > bestValue) return null; // can't beat the best any more
   }
-  if (!best) return null;
-
-  let lastGain = 0;
-  for (let it = 0; it < iterations && best.value > target && it - lastGain < patience; it++) {
-    let cand = mutate(deal, rand, { boxMin, boxMax });
-    while (rand() < 0.3) cand = mutate(cand, rand, { boxMin, boxMax });
-    const r = check(cand, best.value);
-    if (r) {
-      if (r.value < best.value) lastGain = it;
-      deal = cand;
-      best = r;
-    }
-    yield { phase: 'climb', it: it + 1, iterations, deal, best };
-  }
-  return { deal, ...best };
+  const value = penalty + sum / ks.length;
+  return { value, rg: profile[0].rg, rr: profile[0].rr, profile, greedyWins, solution };
 }
 
-export function generateDeal(image, opts = {}) {
-  const steps = generateDealSteps(image, opts);
-  for (;;) {
-    const r = steps.next();
-    if (r.done) return r.value;
-    opts.onProgress?.(r.value);
-  }
+// One climbing step: a mutation, sometimes followed by a few more.
+export function mutateChain(deal, rand, opts) {
+  let d = mutate(deal, rand, opts);
+  while (rand() < 0.3) d = mutate(d, rand, opts);
+  return d;
+}
+
+export function pixelCounts(image) {
+  const pixels = new Array(image.colors.length).fill(0);
+  for (const c of image.cells) pixels[c]++;
+  return pixels;
 }
 
 // Rough difficulty label from a generator score.

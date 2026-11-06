@@ -1,44 +1,65 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Ant Feast deal generator</title>
-<!-- Usage: test/generate.html?level=0&iterations=200&seed=1
-     Prints a deal to paste into src/levels.js, plus a difficulty report. -->
+<!-- Usage: test/generate.html?level=0&iterations=300&objective=sustained
+     Optional: seed=1 min=6 max=24 trials=8 workers=N report=40
+     post=/path also POSTs the output there (for a local helper server).
+     continue=1 starts from the level's current deal instead of a random one.
+     Prints a deal to paste into src/levels.js, plus a difficulty report.
+     Generation runs in workers, so headless runs must wait for the page
+     title to start with "DONE" (virtual-time dumps don't wait for workers). -->
 <pre id="out">generating…</pre>
 <script type="module">
 import { LEVELS } from '../src/levels.js';
-import { parseLevel, formatDeal } from '../src/image.js';
-import { generateDeal, fullReport } from '../src/generate.js';
+import { parseLevel, parseDeal, formatDeal } from '../src/image.js';
 import { Game } from '../src/state.js';
 import { difficultyProfile } from '../src/solver.js';
+import { fullReport } from '../src/generate.js';
+import { generateDealParallel, defaultWorkerCount } from '../src/parallel.js';
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? +q.get(k) : d);
 const def = LEVELS[num('level', 0)];
 const image = parseLevel(def);
+const out = document.getElementById('out');
+const workers = num('workers', defaultWorkerCount());
+const iterations = num('iterations', 200);
 const t0 = performance.now();
-const res = generateDeal(image, {
+
+const job = generateDealParallel(image, {
   seed: num('seed', 1),
-  iterations: num('iterations', 200),
+  iterations,
   boxMin: num('min', 6),
   boxMax: num('max', 24),
   trials: num('trials', 16),
   objective: q.get('objective') ?? 'start',
+  startDeal: q.has('continue') && def.deal ? parseDeal(def.deal, image) : null,
+  workers,
+  onProgress(p) {
+    out.textContent = `${def.name}: ${p.phase} ${p.it}/${iterations}` +
+      (p.best ? ` best=${p.best.value.toFixed(3)}` : '');
+  },
 });
-const out = [];
-if (!res) out.push(`${def.name}: no solvable deal found`);
+const res = await job.promise;
+const secs = (performance.now() - t0) / 1000;
+
+const lines = [];
+if (!res) lines.push(`${def.name}: no solvable deal found`);
 else {
   const rep = fullReport(image, res.deal, num('report', 100));
-  out.push(`${def.name}: ${res.greedyWins ? 'WARNING greedy still wins; ' : ''}climb rg=${res.rg.toFixed(2)} rr=${res.rr.toFixed(2)} | ` +
+  lines.push(`${def.name}: ${res.greedyWins ? 'WARNING greedy still wins; ' : ''}score=${res.value.toFixed(3)} | ` +
     `report greedy=${rep.greedyWins} randomGreedy=${rep.randomGreedyRate.toFixed(2)} ` +
     `random=${rep.randomRate.toFixed(2)} solvable=${rep.solvable} ` +
-    `boxes=${res.deal.flat().length} ${((performance.now() - t0) / 1000).toFixed(0)}s`);
-  out.push(`    deal: ${JSON.stringify(formatDeal(res.deal, image))},`);
-  out.push(`    solution: '${res.solution.join('')}',`);
+    `boxes=${res.deal.flat().length} | ${iterations} candidates on ${workers} workers in ${secs.toFixed(0)}s`);
+  lines.push(`    deal: ${JSON.stringify(formatDeal(res.deal, image))},`);
+  lines.push(`    solution: '${res.solution.join('')}',`);
   const ks = [0, 0.2, 0.4, 0.6, 0.75, 0.9].map((f) => Math.floor(f * res.solution.length));
   const prof = difficultyProfile(new Game(image, 0, { deal: res.deal }), res.solution,
     { checkpoints: ks, trials: Math.min(40, num('report', 100)) });
-  out.push(`    // after k of ${res.solution.length} sensible moves, random-among-eaters / random win: ` +
+  lines.push(`    // after k of ${res.solution.length} sensible moves, random-among-eaters / random win: ` +
     prof.map((p) => `k=${p.k} ${p.rg.toFixed(2)}/${p.rr.toFixed(2)}`).join('  '));
 }
-document.getElementById('out').textContent = out.join('\n');
+out.textContent = lines.join('\n');
+if (q.get('post')) await fetch(q.get('post'), { method: 'POST', body: out.textContent }).catch(() => {});
+document.title = `DONE ${def.name}`;
 </script>

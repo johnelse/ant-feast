@@ -1,13 +1,15 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Ant Feast custom image test</title>
-<!-- Converts a synthetic image into a level, generates a deal in the worker,
+<!-- Converts a synthetic image into a level, generates a deal across workers,
      and replays the solution through the real game loop. -->
 <pre id="out">running…</pre>
 <canvas id="snap" width="420" height="772"></canvas>
 <script type="module">
 import { levelFromSource, toRGB, quantize, compact } from '../src/imageLoad.js';
-import { parseLevel, parseDeal } from '../src/image.js';
+import { parseLevel, parseDeal, formatDeal } from '../src/image.js';
+import { generateDealParallel } from '../src/parallel.js';
+import { difficultyLabel } from '../src/generate.js';
 import { Game } from '../src/state.js';
 import { updateAnts, STEP } from '../src/ants.js';
 import { makeReplayer } from '../src/bot.js';
@@ -45,34 +47,37 @@ const image = parseLevel(def);
 log(`level ${image.width}x${image.height}, colours=${image.colors.length}, full rectangle=${image.cells.every((v) => v >= 0)}`);
 log(def.rows.join('\n'));
 
-// 3. Generate in the worker, as the page does.
+// 3. Generate across the worker pool, as the page does.
 const t0 = performance.now();
-const worker = new Worker(new URL('../src/generateWorker.js', import.meta.url), { type: 'module' });
 let progressCount = 0;
-worker.onerror = (e) => finish(`worker error: ${e.message}`);
-worker.onmessage = (e) => {
-  const msg = e.data;
-  if (msg.type === 'progress') { progressCount++; return; }
-  worker.terminate();
-  const r = msg.result;
-  if (!r) return finish('worker: no solvable deal found');
-  log(`worker done in ${((performance.now() - t0) / 1000).toFixed(1)}s after ${progressCount} progress messages: ` +
-    `difficulty=${r.difficulty} greedyWins=${r.greedyWins} rg=${r.rg.toFixed(2)}`);
-  log(`deal: ${JSON.stringify(r.deal)}`);
+const iterations = +(new URLSearchParams(location.search).get('iterations') ?? 60);
+const job = generateDealParallel(image, {
+  iterations, trials: 12, maxNodes: 3000, target: 0.1, seed: 1,
+  onProgress() { progressCount++; },
+});
+const res = await job.promise;
+if (!res) {
+  finish('generator: no solvable deal found');
+} else {
+  const deal = formatDeal(res.deal, image);
+  const solution = res.solution.join('');
+  const difficulty = difficultyLabel(res);
+  log(`generated in ${((performance.now() - t0) / 1000).toFixed(1)}s after ${progressCount} progress updates: ` +
+    `difficulty=${difficulty} greedyWins=${res.greedyWins} rg=${res.rg.toFixed(2)}`);
+  log(`deal: ${JSON.stringify(deal)}`);
 
   // 4. Replay through the real game loop.
-  const game = new Game(image, 0, { deal: parseDeal(r.deal, image) });
-  const bot = makeReplayer(r.solution);
+  const game = new Game(image, 0, { deal: parseDeal(deal, image) });
+  const bot = makeReplayer(solution);
   let t = 0;
   while (game.status === 'playing' && t < 900) { bot(game); updateAnts(game, STEP); game.updateStatus(); t += STEP; }
   const replay = game.status;
 
-  const snap = new Game(image, 0, { deal: parseDeal(r.deal, image) });
-  const bot2 = makeReplayer(r.solution);
+  const snap = new Game(image, 0, { deal: parseDeal(deal, image) });
+  const bot2 = makeReplayer(solution);
   for (let s = 0; s < 15; s += STEP) { bot2(snap); updateAnts(snap, STEP); snap.updateStatus(); }
   render(document.getElementById('snap').getContext('2d'), snap, {});
-  finish(`difficulty=${r.difficulty} greedyWins=${r.greedyWins} rg=${r.rg.toFixed(2)} ` +
+  finish(`difficulty=${difficulty} greedyWins=${res.greedyWins} rg=${res.rg.toFixed(2)} ` +
     `replay=${replay} (want won) progress=${progressCount} ${((performance.now() - t0) / 1000).toFixed(0)}s`);
-};
-worker.postMessage({ type: 'start', image, options: { iterations: +(new URLSearchParams(location.search).get('iterations') ?? 60), trials: 12, maxNodes: 3000, target: 0.1, seed: 1 } });
+}
 </script>
