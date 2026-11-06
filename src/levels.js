@@ -15,12 +15,12 @@ export const LEVELS = [
       t: '#e8b86d', b: '#6d4c2f', G: '#2e7d32', g: '#9ccc65',
     },
     deal: [
-      'r20 g7 w8 r14 w19 c10 t10 r23 w9 b8 r18 d13',
-      't24 c22 w19 r21 G12 d9 d22 c7 c18 c11 c10 c15',
-      'c12 c23 w12 w8 t15 w6 c23 r11 d9 t14 t20 w13',
-      'w8 r24 r9 c23 r12 r23 c24 d10 d11 r6 d11',
+      'r11 r22 c21 G12 w17 c6 t16 t23 w9 b8 d6 r15',
+      'w10 t21 w10 r12 g7 d21 d7 r24 r21 c19 c17 d10',
+      'c12 c22 w12 w12 c24 c6 t16 r12 d7 t7 c7 c23',
+      'w12 r16 r11 w14 w6 r24 d22 c20 d12 c21 r13',
     ],
-    solution: '11122222223000000022000001223333311111111233333', // stack numbers, top-left = 0
+    solution: '11122222223000000022000001322233111111113333333', // stack numbers, top-left = 0
     rows: [
       'ccccccccccccbbcccccccccccc',
       'wcccwcccwcccbbccwcccwcccwc',
@@ -57,12 +57,12 @@ export const LEVELS = [
       b: '#4fc3f7', d: '#6d4c41', g: '#7cb342', y: '#ffd54f',
     },
     deal: [
-      'b8 g21 r9 R22 W9 c17 W6 c23 W9 W16 c14 W12',
-      'r23 W11 W7 r17 W23 W6 c15 c10 c21 W12 R9 c15',
-      'W11 g14 c13 y19 d17 c9 R7 R15 r13 r18 c24 R14',
-      'g6 R18 r17 R20 g16 W12 c21 y6 c17 W20 c14',
+      'r21 g16 r13 y19 W23 W8 R21 W7 g21 c13 c24 W6',
+      'r13 W12 W14 r23 c15 W6 c6 c24 c19 c24 W9 c7',
+      'W10 g10 y6 g10 c12 d17 R15 R11 R12 r19 c23 R12',
+      'r8 b8 R19 R15 c22 W8 W19 W9 c8 c16 W23',
     ],
-    solution: '22222222300111300000000001111111112222333333333', // stack numbers, top-left = 0
+    solution: '22222220021112011111000000000111122233333333333', // stack numbers, top-left = 0
     rows: [
       'ccccccccccccccccccccWccccc',
       'ccccccWcccccccccccWWWWcccc',
@@ -99,12 +99,12 @@ export const LEVELS = [
       Y: '#fb8c00', g: '#2e7d32', G: '#8bc34a', s: '#8d6e63',
     },
     deal: [
-      'P17 y21 p17 p15 p21 c7 c10 c23 c18 G20 P6 c9',
-      'c24 y11 s6 P9 c19 P13 P14 c7 Y10 c13 c19',
-      'c15 P22 c14 p20 c14 G10 g24 c12 c22 P17 c8',
-      's15 s24 c8 p14 c10 p9 c10 c22 c18 Y18 s17',
+      'P17 y23 p24 p13 p21 c18 c24 P12 c13 G20 c6 c24',
+      'c19 y9 s6 p11 G10 P9 P14 P18 Y10 c15 c10',
+      'c16 P21 c10 p16 c13 c7 g24 c12 c24 c13 s17',
+      's15 s24 c7 p11 c6 P7 c12 c22 c8 Y18 c23',
     ],
-    solution: '100233322222200222000000002111113111113333333', // stack numbers, top-left = 0
+    solution: '100233322222200000000002221133333333111111112', // stack numbers, top-left = 0
     rows: [
       'ccccyccccccccccccccccccc',
       'ccccccccccccccccyccccccc',
