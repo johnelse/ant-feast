@@ -53,7 +53,8 @@ function drawSlots(ctx, game) {
       ctx.restore();
       return;
     }
-    drawBox(ctx, game, box, r, { hole: true, value: box.remaining });
+    // Ants at home / ants still belonging to the box (home + out gathering).
+    drawBox(ctx, game, box, r, { hole: true, value: `${box.remaining}/${box.remaining + box.out}` });
   });
 }
 
@@ -112,7 +113,14 @@ function drawBox(ctx, game, box, r, { hole = false, value, compact = false, high
     textY = y + h * 0.66;
   }
 
-  ctx.font = compact ? `700 ${Math.min(14, h - 4)}px system-ui, sans-serif` : '800 20px system-ui, sans-serif';
+  // Shrink the label if it's too wide for the box (e.g. "24/24").
+  const weight = compact ? 700 : 800;
+  let size = compact ? Math.min(14, h - 4) : 20;
+  ctx.font = `${weight} ${size}px system-ui, sans-serif`;
+  while (size > 10 && ctx.measureText(String(value)).width > w - 10) {
+    size--;
+    ctx.font = `${weight} ${size}px system-ui, sans-serif`;
+  }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineWidth = compact ? 3 : 4;
