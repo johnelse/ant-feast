@@ -50,7 +50,7 @@ python3 -m http.server 8000          # from the repo root, then open http://loca
 | `state.js` | `Game`: pure game state (slots, stacks, incremental exposure flood-fill, target claiming, routing BFS, win/lose). Also `randomDeal`, `mulberry32`, `hashString`, `SLOT_COUNT`, `STACK_COUNT`. |
 | `ants.js` | Ant simulation (`updateAnts(game, dt)`): release timing, track-and-route path planning, carrying pixels home. |
 | `layout.js` | Fixed logical layout (420×772): picture, slot and stack rectangles. Cell size = `floor(368 / (rows + 2))`. |
-| `render.js` | Canvas drawing: board, picture, slots, stacks, ants, win/lose overlay, debug overlay. |
+| `render.js` | Canvas drawing: board, picture, slots, stacks, ants, win/lose overlay, debug overlay. The picture and the stacks are cached in offscreen canvases and only repainted when they change; drawing everything each frame was too slow on phones for 40×40 pictures. |
 | `bot.js` | `makeReplayer(solution)` plays a stored solution (used by `?auto` and tests). |
 | `solver.js` | DFS solver on a "place a box, then settle" model (`solve`). Also scripted players (greedy, random among boxes that can eat, fully random) and `difficultyProfile`, which gives win rates after the first k moves of the solution. |
 | `generate.js` | Building blocks for the deal generator: `checkDeal` (solvable? how hard?), the `mutate`/`mutateChain` hill-climb moves, `sequenceDeal` (always-solvable fallback start), `difficultyLabel`, `fullReport`. |

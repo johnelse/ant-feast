@@ -7,6 +7,10 @@ html, body {
   color: #f2e6cc;
   font-family: system-ui, sans-serif;
   overscroll-behavior: none;
+  /* The canvas is sized to fit, so nothing needs to scroll. Scrolling on
+     mobile slides the address bar in and out, resizing (and so clearing)
+     the canvas. */
+  overflow: hidden;
 }
 
 header {

@@ -80,20 +80,39 @@ levelSelect.addEventListener('change', () => startLevel(parseInt(levelSelect.val
 restartBtn.addEventListener('click', () => startLevel(levelIndex));
 
 // --- Sizing -------------------------------------------------------------
+// Mobile browsers fire resize often (e.g. as the address bar slides in and
+// out). Resizing a canvas clears it, so only resize when the size really
+// changes, and redraw straight away so a blank canvas is never shown.
 let scale = 1;
+let sizeKey = '';
 function resize() {
   const header = document.querySelector('header').offsetHeight;
   const availW = Math.min(window.innerWidth - 16, 640);
   const availH = window.innerHeight - header - 16;
   scale = Math.max(0.1, Math.min(availW / W, availH / H));
   const dpr = window.devicePixelRatio || 1;
-  canvas.style.width = `${W * scale}px`;
-  canvas.style.height = `${H * scale}px`;
-  canvas.width = Math.round(W * scale * dpr);
-  canvas.height = Math.round(H * scale * dpr);
-  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  const cssW = Math.floor(W * scale);
+  const cssH = Math.floor(H * scale);
+  const key = `${cssW}x${cssH}@${dpr}`;
+  if (key === sizeKey) return;
+  sizeKey = key;
+  scale = cssW / W;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  if (game) render(ctx, game, { debug });
 }
-window.addEventListener('resize', resize);
+let resizeQueued = false;
+window.addEventListener('resize', () => {
+  if (resizeQueued) return;
+  resizeQueued = true;
+  requestAnimationFrame(() => {
+    resizeQueued = false;
+    resize();
+  });
+});
 
 // --- Input --------------------------------------------------------------
 canvas.addEventListener('pointerdown', (e) => {

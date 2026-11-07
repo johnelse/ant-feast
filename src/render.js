@@ -1,6 +1,6 @@
 // Canvas drawing. Everything is in logical coordinates (see layout.js).
 
-import { W, H, PIC, picRect, slotRect, stackRect, stackRowH } from './layout.js';
+import { W, H, PIC, STACK, picRect, slotRect, stackRect, stackRowH } from './layout.js';
 
 const BG = '#3a2c24';
 const BOARD = '#f2e6cc';
@@ -18,26 +18,53 @@ export function render(ctx, game, opts = {}) {
   if (game.status !== 'playing') drawOverlay(ctx, game);
 }
 
+// The picture is drawn into an offscreen canvas at device resolution, and
+// only cells whose state changed since the last frame are repainted. Large
+// pictures (40x40 = 1600 cells) are otherwise thousands of draw calls a frame,
+// which is slow on phones.
+let picCache = null; // { game, key, canvas, ctx, dc, state }
+
 function drawPicture(ctx, game) {
   const pr = picRect(game);
   roundRect(ctx, PIC.x - 4, PIC.y - 4, PIC.w + 8, PIC.h + 8, 10);
   ctx.fillStyle = BOARD;
   ctx.fill();
 
+  // Whole device pixels per cell, so repainting one cell never touches its neighbours.
+  const k = ctx.getTransform().a;
+  const dc = Math.max(1, Math.round(pr.cell * k));
+  const key = `${dc}`;
+  if (!picCache || picCache.game !== game || picCache.key !== key) {
+    const canvas = document.createElement('canvas');
+    canvas.width = game.w * dc;
+    canvas.height = game.h * dc;
+    picCache = { game, key, canvas, ctx: canvas.getContext('2d'), dc,
+      state: new Int16Array(game.cells.length).fill(-2) };
+  }
+  const { ctx: pc, state } = picCache;
+  const bevel = Math.max(1, Math.round(2 * k));
   for (let i = 0; i < game.cells.length; i++) {
     const c = game.cells[i];
+    const st = c < 0 ? -1 : c * 2 + (game.claimed[i] ? 1 : 0);
+    if (st === state[i]) continue;
+    state[i] = st;
+    const x = (i % game.w) * dc;
+    const y = Math.floor(i / game.w) * dc;
+    pc.clearRect(x, y, dc, dc);
     if (c < 0) continue;
-    const x = pr.x + (i % game.w) * pr.cell;
-    const y = pr.y + Math.floor(i / game.w) * pr.cell;
-    ctx.globalAlpha = game.claimed[i] ? 0.55 : 1;
-    ctx.fillStyle = game.colors[c];
-    ctx.fillRect(x, y, pr.cell, pr.cell);
+    pc.globalAlpha = game.claimed[i] ? 0.55 : 1;
+    pc.fillStyle = game.colors[c];
+    pc.fillRect(x, y, dc, dc);
     // Soft bevel so the big pixels read as blocks.
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.fillRect(x, y + pr.cell - 2, pr.cell, 2);
-    ctx.fillRect(x + pr.cell - 2, y, 2, pr.cell - 2);
+    pc.fillStyle = 'rgba(0,0,0,0.12)';
+    pc.fillRect(x, y + dc - bevel, dc, bevel);
+    pc.fillRect(x + dc - bevel, y, bevel, dc - bevel);
   }
-  ctx.globalAlpha = 1;
+  pc.globalAlpha = 1;
+  const smooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(picCache.canvas, pr.x, pr.y, pr.w, pr.h);
+  ctx.imageSmoothingEnabled = smooth;
 }
 
 function drawSlots(ctx, game) {
@@ -58,8 +85,33 @@ function drawSlots(ctx, game) {
   });
 }
 
+// The stacks only change when a box is taken or the top boxes' highlight
+// changes, so they're drawn into an offscreen layer (same device pixels as
+// the main canvas, from the top of the stacks down) and copied each frame.
+let stackCache = null; // { key, canvas, top }
+
 function drawStacks(ctx, game) {
   const canPlace = game.freeSlot() >= 0 && game.status === 'playing';
+  const t = ctx.getTransform();
+  const main = ctx.canvas;
+  const key = [main.width, main.height, t.a, t.d, canPlace, game.stacks.map((s) => s.length).join(',')].join('|');
+  if (!stackCache || stackCache.game !== game || stackCache.key !== key) {
+    const top = Math.max(0, Math.floor((STACK.y - 6) * t.d));
+    const canvas = stackCache?.canvas ?? document.createElement('canvas');
+    canvas.width = main.width;
+    canvas.height = Math.max(1, main.height - top);
+    const sc = canvas.getContext('2d');
+    sc.setTransform(t.a, 0, 0, t.d, 0, -top);
+    paintStacks(sc, game, canPlace);
+    stackCache = { game, key, canvas, top };
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(stackCache.canvas, 0, stackCache.top);
+  ctx.restore();
+}
+
+function paintStacks(ctx, game, canPlace) {
   const rowH = stackRowH(game.deepest);
   game.stacks.forEach((stack, si) => {
     if (!stack.length) {
