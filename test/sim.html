@@ -3,7 +3,8 @@
 <title>Ant Feast simulation test</title>
 <!-- Checks every level: deal totals match the picture, and the stored solution
      wins when replayed through the real game loop. Also renders a mid-game
-     snapshot (?level=N&t=seconds&debug). -->
+     snapshot (?level=N&t=seconds&debug). ?only=Parrot,Apple checks just those
+     levels. Sets the title to "DONE ..." when finished. -->
 <pre id="out">running…</pre>
 <canvas id="snap" width="420" height="772"></canvas>
 <script type="module">
@@ -33,7 +34,8 @@ function run(game, bot, seconds) {
 }
 
 const lines = [];
-for (const def of LEVELS) {
+const only = new URLSearchParams(location.search).get('only')?.split(',');
+for (const def of LEVELS.filter((d) => !only || only.includes(d.name))) {
   try {
     const game = makeGame(def);
     if (!def.solution) {
@@ -67,4 +69,5 @@ run(snap, def.solution ? makeReplayer(def.solution) : () => {}, parseFloat(q.get
 render(document.getElementById('snap').getContext('2d'), snap, { debug: q.has('debug') });
 
 document.getElementById('out').textContent = lines.join('\n');
+document.title = `DONE ${lines.join(' | ')}`;
 </script>
