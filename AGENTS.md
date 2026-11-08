@@ -68,8 +68,13 @@ python3 -m http.server 8000          # from the repo root, then open http://loca
 - **Objective `'sustained'`** (always use this): averages how often unthinking players win when
   starting from several points along the solution (0, 20, 40, 60 and 75% of the way through).
   There is a penalty if the greedy player wins. **Lower is harder.**
-  - Current built-in levels score roughly 0.02–0.10.
+  - Most built-in levels score 0.000–0.075.
   - Above about 0.15 a level feels easy.
+  - Known weaker levels:
+    - **Snail** (0.525): its last 40% is easy, and it may need a new composition.
+    - **Lighthouse** (0.525): kept for its looks; a busier sky was judged too messy
+      (`tools/out/lighthouse_v3.py` on the original machine).
+    - **Mushroom** (0.300): only its last quarter is easy.
 - **What actually makes a level hard is colour topology, not resolution or box size.** Each
   colour should appear in many separate places at several depths: outlines, bands, thin lines,
   and shared background colours.
@@ -77,8 +82,8 @@ python3 -m http.server 8000          # from the repo root, then open http://loca
   - The final ~25% of any level is inherently easy.
 - **Art direction:** get that topology from *detail that belongs to the picture*: outlines,
   shading bands, patterns on the subject, thin overlapping features, and scenery. Avoid random
-  speckle, which hides the subject. Most levels before Jellyfish still lean on speckle and
-  are candidates for redrawing.
+  speckle, which hides the subject. All 18 levels are now drawn this way at 40×40, each by its
+  own script in `tools/art/`.
   - **Jellyfish (40×40, `tools/art/jelly.py`) is the reference example.** It has an outlined
     bell with a highlight, a shadow and patterns, frilly arms, crossing tentacles, bubbles,
     and wavy "current" streaks in a second water colour. It scores 0.000: careless play loses
@@ -88,6 +93,25 @@ python3 -m http.server 8000          # from the repo root, then open http://loca
     of the background colour at different depths are what make it hard.
   - **Larger grids** (40×40, 8 px cells) give room for meaningful detail. They cost about 2–3×
     in play time (about 8 minutes) and up to 2–3× in generation time (4–11 minutes).
+- **Lessons from redrawing all the levels:**
+  - **Break up big open backgrounds** with things that belong in the scene. Big clouds and
+    plain shapes don't help. What worked:
+    - wavy streaks: water currents, sky wisps, cirrus, nebulae, moonlit cloud
+    - foliage framing the picture: trees, big veined leaves, ferns, blossom branches, kelp
+    - structure on large surfaces: timber framing, leaf veins that reach the leaf's edge,
+      rock streaks on mountains, wallpaper stripes
+  - **Some examples:**
+    - Apple: 0.94 in an open orchard, 0.037 inside a leafy tree.
+    - House: 0.68 with plain walls and sky, 0.025 with framing and trees.
+    - Penguin: 0.65 with a plain sky, 0.037 with a sun halo, cirrus and seabirds.
+  - **The middle of the picture is eaten last**, so it needs interleaved colours too. Large
+    plain subject areas, or long connected bands (for example a spiral shell's whorls), make the
+    endgame easy.
+  - **Keep additions purposeful.** The user rejects pictures that get messy, even if they are
+    harder.
+  - **Generator luck matters.** Another 600-candidate climb with a new seed sometimes drops the
+    score sharply (Watermelon went from 0.325 to 0.000, Ladybird from 0.175 to 0.075). Try that
+    before changing the art. A score still above about 0.3 after three climbs needs art changes.
 
 ## Testing and regenerating (headless)
 
@@ -99,9 +123,12 @@ python3 tools/serve.py &      # serves the repo on :8766 and saves POSTed output
 ```
 
 - **`test/sim.html`**: checks every level (deal totals match, the stored solution wins through
-  the real game loop, the greedy player loses). `?level=N&t=SECONDS&debug` draws a mid-game
-  snapshot. It's synchronous, so `--dump-dom` works:
-  `chromium --headless --dump-dom http://127.0.0.1:8766/test/sim.html`
+  the real game loop, the greedy player loses).
+  - `?only=Parrot,Apple` checks just those levels, in seconds.
+  - `?level=N&t=SECONDS&debug` draws a mid-game snapshot.
+  - The page sets a `DONE …` title with the results, so use `tools/runpage.sh`, or
+    `--dump-dom` since the page is synchronous:
+    `chromium --headless --dump-dom http://127.0.0.1:8766/test/sim.html`
 - **`test/difficulty.html`**: difficulty profile per level. Options:
   - `?trials=40`
   - `&only=Pizza,Apple`
@@ -118,8 +145,10 @@ python3 tools/serve.py &      # serves the repo on :8766 and saves POSTed output
   - Box size: `min=6&max=24` (default). For about 40×40 pictures use `min=10&max=40`.
   - `continue=1` keeps improving the level's current deal.
   - `seed=`, `workers=`.
-  - About 2 minutes per 28×28 level on a 4-core laptop at 300 iterations. Scales roughly with
-    cores.
+  - On a 4-core laptop, 300 iterations take about 2 minutes for a 28×28 level and 4–8 minutes
+    for 40×40.
+  - Only about 6% of a run is single-threaded, so it scales almost linearly with cores. Workers
+    are capped at 16 by `defaultWorkerCount()` in `src/parallel.js`.
 - **`test/custom.html`, `test/ui.html`**: user-image pipeline and the dialog flow. Both set a
   `DONE` title, so use `tools/runpage.sh`.
 
@@ -143,29 +172,50 @@ Pictures are drawn procedurally in Python (needs Pillow) with `tools/art/pix.py`
 A drawing script lives in `tools/art/`. It defines `PAL` (key → `#hex`) and `draw(size)`,
 which returns a `Pic` (see `jelly.py`; its `WATER` styles show several background textures).
 
+Each script also runs on its own to write a preview: `python3 tools/art/owl.py /tmp/owl.png`
+(`jelly.py` and `parrot.py` take a size first: `python3 tools/art/jelly.py 40 /tmp/j.png`).
+Shared shapes and scenery (ellipses, polygons, leaves, ferns, clouds, streaks, grass, flowers,
+`curve_in` for curves clipped to a shape) are in `tools/art/shapes.py`.
+
 Workflow:
+
+```sh
+python3 tools/serve.py &      # once, in the background
+
+# Draw, generate and check in one go (level index = position in LEVELS, counting from 0).
+# Installs the picture, generates a deal, keeps climbing while the score is above 0.06, installs
+# the best deal, then replays the solution with sim.html. Takes about 5-25 minutes.
+tools/pipeline.sh "Jellyfish" tools/art/jelly.py 6
+
+# Commit one level without its neighbours' unfinished changes in levels.js:
+python3 tools/stage_level.py "Jellyfish"
+git add tools/art/jelly.py
+git commit
+```
+
+The steps it runs can also be done by hand:
 
 ```sh
 # 1. draw and install the picture (replaces a level of that name in place, dropping its stale
 #    deal; otherwise adds it after --after, or at the end). --png writes a preview to look at.
 python3 tools/art/install.py picture tools/art/jelly.py 40 "Jellyfish" --after "Mushroom" --png /tmp/j.png
 
-# 2. generate a deal for it (level index = its position in LEVELS, counting from 0)
-python3 tools/serve.py &
+# 2. generate a deal for it
 tools/runpage.sh "http://127.0.0.1:8766/test/generate.html?level=6&iterations=300&objective=sustained&trials=8&report=40&min=10&max=40&post=/gen6"
 
 # 3. install the deal and solution it found
 python3 tools/art/install.py deal "Jellyfish" tools/out/gen6
 ```
 
-Then check the level with `sim.html` and `difficulty.html`, and look at it in the game.
+Then look at the level in the game. If the score is weak, back up the script and the deal
+output in `tools/out/` before changing the art, so you can go back.
 
 Rules for pictures:
 
 - Use at most 8 colours. Pictures must be complete rectangles. `install.py` checks both.
 - Any change to a picture invalidates its deal, so always regenerate one after reinstalling.
-- `src/levels.js` is the source of truth for what ships. The scripts for most existing levels
-  were not kept. Keep the script for any new or redrawn level in `tools/art/`.
+- `src/levels.js` is the source of truth for what ships. Every built-in level has its drawing
+  script in `tools/art/`; keep it in step when a picture changes.
 
 ## Conventions
 
