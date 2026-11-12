@@ -82,7 +82,7 @@ python3 -m http.server 8000          # from the repo root, then open http://loca
   - The final ~25% of any level is inherently easy.
 - **Art direction:** get that topology from *detail that belongs to the picture*: outlines,
   shading bands, patterns on the subject, thin overlapping features, and scenery. Avoid random
-  speckle, which hides the subject. All 18 levels are now drawn this way at 40×40, each by its
+  speckle, which hides the subject. All 20 levels are drawn this way at 40×40, each by its
   own script in `tools/art/`.
   - **Jellyfish (40×40, `tools/art/jelly.py`) is the reference example.** It has an outlined
     bell with a highlight, a shadow and patterns, frilly arms, crossing tentacles, bubbles,
