@@ -187,7 +187,7 @@ python3 tools/serve.py &      # once, in the background
 # the best deal, then replays the solution with sim.html. Takes about 5-25 minutes.
 tools/pipeline.sh "Jellyfish" tools/art/jelly.py 6
 
-# Commit one level without its neighbours' unfinished changes in levels.js:
+# Commit one level (new or changed) without its neighbours' unfinished changes in levels.js:
 python3 tools/stage_level.py "Jellyfish"
 git add tools/art/jelly.py
 git commit
